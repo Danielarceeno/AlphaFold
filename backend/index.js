@@ -57,6 +57,24 @@ app.get('/api/protein/:id/structure', async (req, res) => {
     }
 });
 
+app.get('/api/uniprot/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const response = await axios.get(`https://rest.uniprot.org/uniprotkb/${id}.json`);
+
+        // Procura a seção que explica a FUNÇÃO da proteína
+        const functionComment = response.data.comments?.find(c => c.commentType === 'FUNCTION');
+        
+        const description = functionComment 
+            ? functionComment.texts[0].value 
+            : 'Descrição detalhada não disponível para esta proteína.';
+
+        res.json({ function: description });
+    } catch (error) {
+        res.json({ function: 'Não foi possível carregar o texto explicativo desta proteína.' });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`✅ Backend rodando na porta ${PORT}`);
 });
