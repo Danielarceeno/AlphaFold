@@ -24,6 +24,22 @@ app.get('/api/protein/:id', async (req, res) => {
         res.status(404).json({ error: 'Proteína não encontrada no AlphaFold DB.' });
     }
 });
+
+app.get('/api/protein/:id/structure', async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`Baixando estrutura 3D para: ${id}`);
+        const metadataResponse = await axios.get(`${ALPHAFOLD_API}/${id}`);
+        const pdbUrl = metadataResponse.data[0].pdbUrl;
+        const pdbResponse = await axios.get(pdbUrl);
+        res.set('Content-Type', 'text/plain');
+        res.send(pdbResponse.data);
+    } catch (error) {
+        console.error("Erro ao baixar estrutura:", error.message);
+        res.status(500).json({ error: 'Erro ao baixar a estrutura da proteína.' });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`✅ Backend rodando na porta ${PORT}`);
     console.log(`Acesse: http://localhost:${PORT}`);
