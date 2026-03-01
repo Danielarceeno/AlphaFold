@@ -38,6 +38,8 @@ function ProteinAnalyzer({ defaultSearch = '', title = '' }) {
     setIsFunctionExpanded(false);
 
     try {
+      const BASE_URL = 'https://glorious-goggles-p47qgj7xxqwh649x-3000.app.github.dev';
+
       const searchResponse = await axios.get(`${BASE_URL}/api/search/${searchTerm}`);
       const proteinId = searchResponse.data.id;
 
@@ -220,8 +222,38 @@ function ProteinAnalyzer({ defaultSearch = '', title = '' }) {
             </ul>
           </div>
         )}
-
       </div>
+
+      {/* NOVO: CARTÃO DA MATRIZ PAE */}
+      {metadata && metadata.paeImageUrl && (
+        <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
+          <h4 style={{ marginTop: 0, color: '#f8fafc', fontSize: '16px', borderBottom: '1px solid #334155', paddingBottom: '10px', marginBottom: '15px' }}>
+            Matriz PAE (Detector de Flexibilidade)
+          </h4>
+          
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <img 
+              src={metadata.paeImageUrl} 
+              alt="Gráfico PAE" 
+              style={{ width: '100%', maxWidth: '280px', borderRadius: '8px', border: '1px solid #334155' }}
+            />
+            
+            <div style={{ flex: 1, minWidth: '250px', backgroundColor: '#0f172a', padding: '15px', borderRadius: '8px', border: '1px solid #334155' }}>
+              <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#e2e8f0', fontWeight: 'bold' }}>
+                Como interpretar este gráfico?
+              </p>
+              <p style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#cbd5e1', lineHeight: '1.5' }}>
+                Este mapa mostra quais partes da proteína se movem juntas. Os cientistas utilizam-no para descobrir se a proteína é um "bloco sólido" ou se tem "tentáculos flexíveis".
+              </p>
+              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <li><strong style={{ color: '#22c55e' }}>Verde Escuro:</strong> Posições fixas e rígidas.</li>
+                <li><strong style={{ color: '#bef264' }}>Verde Claro / Branco:</strong> Regiões soltas ou altamente flexíveis.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+      
     </div>
   );
 }
