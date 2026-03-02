@@ -10,8 +10,8 @@ import {
   Zap,
 } from "lucide-react";
 
-const BASE_URL =
-  "https://glorious-goggles-p47qgj7xxqwh649x-3000.app.github.dev";
+//const BASE_URL ="https://glorious-goggles-p47qgj7xxqwh649x-3000.app.github.dev";
+const BASE_URL = "https://alphafold-1l5b.onrender.com";
 
 function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
   const [searchTerm, setSearchTerm] = useState(defaultSearch);
