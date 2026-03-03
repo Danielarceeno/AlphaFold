@@ -10,8 +10,7 @@ import {
   Zap,
 } from "lucide-react";
 
-//const BASE_URL ="https://glorious-goggles-p47qgj7xxqwh649x-3000.app.github.dev";
-const BASE_URL = "https://alphafold-1l5b.onrender.com";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
   const [searchTerm, setSearchTerm] = useState(defaultSearch);
@@ -20,8 +19,11 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
   const [metadata, setMetadata] = useState(null);
   const [description, setDescription] = useState(null);
   const [isFunctionExpanded, setIsFunctionExpanded] = useState(false);
+
   const [variants, setVariants] = useState([]);
-  const [showMutations, setShowMutations] = useState(false);
+
+  const [showMutationsPanel, setShowMutationsPanel] = useState(false); // Controla se a lista está visível
+  const [activeMutations, setActiveMutations] = useState([]); // Guarda quais mutações foram clicadas
 
   const viewerContainerRef = useRef(null);
   const [viewerInstance, setViewerInstance] = useState(null);
@@ -43,10 +45,14 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
     setMetadata(null);
     setDescription(null);
     setVariants([]);
-    setShowMutations(false);
+    setShowMutationsPanel(false);
+    setActiveMutations([]);
     setIsFunctionExpanded(false);
 
     try {
+      const BASE_URL =
+        "https://glorious-goggles-p47qgj7xxqwh649x-3000.app.github.dev";
+      
       const searchResponse = await axios.get(
         `${BASE_URL}/api/search/${searchTerm}`,
       );
@@ -69,7 +75,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
       viewerInstance.clear();
       viewerInstance.addModel(structureResponse.data, "pdb");
 
-      applyStyles(false);
+      applyStyles([]);
 
       viewerInstance.zoomTo();
     } catch (err) {
@@ -82,9 +88,8 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
     }
   };
 
-  const applyStyles = (highlight) => {
+  const applyStyles = (currentActiveMutations) => {
     if (!viewerInstance) return;
-
     viewerInstance.setStyle(
       {},
       {
@@ -99,10 +104,9 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
       },
     );
 
-    if (highlight && variants.length > 0) {
-      const mutatedPositions = variants.map((v) => parseInt(v.position));
+    if (currentActiveMutations && currentActiveMutations.length > 0) {
       viewerInstance.addStyle(
-        { resi: mutatedPositions },
+        { resi: currentActiveMutations },
         { sphere: { color: "#ef4444", radius: 1.5 } },
       );
     }
@@ -110,10 +114,17 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
     viewerInstance.render();
   };
 
-  const toggleMutations = () => {
-    const newState = !showMutations;
-    setShowMutations(newState);
-    applyStyles(newState);
+  const toggleSingleMutation = (position) => {
+    const pos = parseInt(position);
+    let newActiveList;
+    if (activeMutations.includes(pos)) {
+      newActiveList = activeMutations.filter((p) => p !== pos);
+    } else {
+      newActiveList = [...activeMutations, pos];
+    }
+
+    setActiveMutations(newActiveList);
+    applyStyles(newActiveList);
   };
 
   return (
@@ -130,7 +141,6 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
         </h3>
       )}
 
-      {/* Barra de Pesquisa Responsiva */}
       <div
         style={{
           display: "flex",
@@ -415,9 +425,10 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
             )}
           </div>
 
+          {/* Botão agora apenas abre e fecha o painel de mutações */}
           {variants.length > 0 && (
             <button
-              onClick={toggleMutations}
+              onClick={() => setShowMutationsPanel(!showMutationsPanel)}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -425,10 +436,10 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
                 padding: "8px 12px",
                 fontSize: "13px",
                 fontWeight: "bold",
-                backgroundColor: showMutations ? "#ef4444" : "#0f172a",
-                color: showMutations ? "white" : "#f8fafc",
+                backgroundColor: showMutationsPanel ? "#312e81" : "#0f172a",
+                color: showMutationsPanel ? "white" : "#f8fafc",
                 border: "1px solid",
-                borderColor: showMutations ? "#ef4444" : "#334155",
+                borderColor: showMutationsPanel ? "#4f46e5" : "#334155",
                 borderRadius: "6px",
                 cursor: "pointer",
                 transition: "0.2s",
@@ -437,9 +448,9 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
               }}
             >
               <Zap size={14} />
-              {showMutations
-                ? "Ocultar Mutações"
-                : `Destacar ${variants.length} Mutações`}
+              {showMutationsPanel
+                ? "Ocultar Painel de Mutações"
+                : `Analisar ${variants.length} Mutações`}
             </button>
           )}
         </div>
@@ -456,56 +467,105 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
           }}
         ></div>
 
-        {showMutations && (
+        {/* LISTA DE MUTAÇÕES INTERATIVA */}
+        {showMutationsPanel && (
           <div
             style={{
-              backgroundColor: "#450a0a",
-              border: "1px solid #7f1d1d",
+              backgroundColor: "#0f172a",
+              border: "1px solid #334155",
               borderRadius: "8px",
               padding: "15px",
-              maxHeight: "150px",
+              maxHeight: "250px",
               overflowY: "auto",
             }}
           >
-            <h5
+            <div
               style={{
-                margin: "0 0 10px 0",
-                color: "#fca5a5",
-                fontSize: "13px",
-              }}
-            >
-              MUTAÇÕES DETETADAS NESTA ESTRUTURA:
-            </h5>
-            <ul
-              style={{
-                margin: 0,
-                paddingLeft: "20px",
-                color: "#fecaca",
-                fontSize: "12px",
                 display: "flex",
-                flexDirection: "column",
-                gap: "8px",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "15px",
               }}
             >
-              {variants.slice(0, 20).map((v, i) => (
-                <li key={i}>
-                  <strong>Posição {v.position}</strong> ({v.original} →{" "}
-                  {v.mutated}): {v.description}
-                </li>
-              ))}
-              {variants.length > 20 && (
-                <li>
-                  <em>
-                    ... e mais {variants.length - 20} variantes conhecidas.
-                  </em>
-                </li>
+              <h5 style={{ margin: 0, color: "#94a3b8", fontSize: "13px" }}>
+                CLIQUE EM UMA MUTAÇÃO PARA DESTACAR NO 3D:
+              </h5>
+              {/* Botão rápido para limpar todas as seleções */}
+              {activeMutations.length > 0 && (
+                <button
+                  onClick={() => {
+                    setActiveMutations([]);
+                    applyStyles([]);
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#ef4444",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                  }}
+                >
+                  Limpar Seleção
+                </button>
               )}
-            </ul>
+            </div>
+
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+            >
+              {variants.map((v, i) => {
+                const pos = parseInt(v.position);
+                const isActive = activeMutations.includes(pos);
+
+                return (
+                  <button
+                    key={i}
+                    onClick={() => toggleSingleMutation(pos)}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      padding: "12px",
+                      backgroundColor: isActive ? "#450a0a" : "#1e293b", // Fica vermelho escuro se selecionado
+                      border: "1px solid",
+                      borderColor: isActive ? "#ef4444" : "#334155", // Borda vermelha se selecionado
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: isActive ? "#fca5a5" : "#e2e8f0",
+                        fontSize: "14px",
+                        fontWeight: "bold",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Posição {v.position}{" "}
+                      <span style={{ color: "#94a3b8", fontWeight: "normal" }}>
+                        ({v.original} → {v.mutated})
+                      </span>
+                    </span>
+                    <span
+                      style={{
+                        color: isActive ? "#fecaca" : "#94a3b8",
+                        fontSize: "13px",
+                        lineHeight: "1.4",
+                      }}
+                    >
+                      {v.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
 
-      {/* CARTÃO DA MATRIZ PAE RESPONSIVO */}
       {metadata && metadata.paeImageUrl && (
         <div
           style={{
@@ -527,7 +587,6 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
           >
             Matriz PAE (Detector de Flexibilidade)
           </h4>
-
           <div
             style={{
               display: "flex",
@@ -546,7 +605,6 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
                 border: "1px solid #334155",
               }}
             />
-
             <div
               style={{
                 flex: 1,
@@ -632,7 +690,7 @@ function App() {
         fontFamily: "system-ui, sans-serif",
       }}
     >
-      {/* BARRA LATERAL (Vira cabeçalho no mobile) */}
+      {/* BARRA LATERAL */}
       <aside
         style={{
           width: isMobile ? "100%" : "260px",
@@ -792,7 +850,7 @@ function App() {
               </p>
             </header>
 
-            {/* A mágica aqui: no mobile, as proteínas ficam uma EM CIMA da outra. No PC, ficam lado a lado! */}
+            {/* lado a lado! */}
             <div
               style={{
                 display: "grid",
