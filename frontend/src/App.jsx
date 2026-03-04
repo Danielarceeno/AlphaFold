@@ -50,9 +50,6 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
     setIsFunctionExpanded(false);
 
     try {
-      const BASE_URL =
-        "https://glorious-goggles-p47qgj7xxqwh649x-3000.app.github.dev";
-      
       const searchResponse = await axios.get(
         `${BASE_URL}/api/search/${searchTerm}`,
       );
