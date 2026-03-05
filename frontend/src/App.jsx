@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronUp,
   Zap,
+  Star
 } from "lucide-react";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -22,8 +23,8 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
 
   const [variants, setVariants] = useState([]);
 
-  const [showMutationsPanel, setShowMutationsPanel] = useState(false); // Controla se a lista está visível
-  const [activeMutations, setActiveMutations] = useState([]); // Guarda quais mutações foram clicadas
+  const [showMutationsPanel, setShowMutationsPanel] = useState(false);
+  const [activeMutations, setActiveMutations] = useState([]);
 
   const viewerContainerRef = useRef(null);
   const [viewerInstance, setViewerInstance] = useState(null);
@@ -524,9 +525,9 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
                       flexDirection: "column",
                       alignItems: "flex-start",
                       padding: "12px",
-                      backgroundColor: isActive ? "#450a0a" : "#1e293b", // Fica vermelho escuro se selecionado
+                      backgroundColor: isActive ? "#450a0a" : "#1e293b",
                       border: "1px solid",
-                      borderColor: isActive ? "#ef4444" : "#334155", // Borda vermelha se selecionado
+                      borderColor: isActive ? "#ef4444" : "#334155",
                       borderRadius: "8px",
                       cursor: "pointer",
                       textAlign: "left",
@@ -665,9 +666,19 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
   );
 }
 
+const POPULAR_PROTEINS = [
+  { name: "p53", title: "Guardiã do Genoma", desc: "A proteína mais estudada na história da pesquisa do câncer. Ela impede que células sofram mutações graves.", color: "#ef4444" },
+  { name: "Cas9", title: "A Tesoura Genética (CRISPR)", desc: "Revolucionou a biologia moderna. É usada pelos cientistas para 'cortar e editar' o DNA com precisão.", color: "#8b5cf6" },
+  { name: "Spike", title: "A Chave do Vírus", desc: "A famosa proteína do SARS-CoV-2. Estudá-la foi o que permitiu a criação rápida das vacinas contra a COVID-19.", color: "#10b981" },
+  { name: "GFP", title: "Lanterna Celular", desc: "Proteína Fluorescente Verde (veio de uma água-viva). Os cientistas usam-na para 'iluminar' e rastrear células ao vivo.", color: "#84cc16" },
+  { name: "Insulin", title: "Reguladora de Energia", desc: "Vital para o controle do açúcar no sangue. O seu estudo contínuo salva a vida de milhões de diabéticos.", color: "#3b82f6" },
+  { name: "Hemoglobin", title: "Transportadora de Oxigênio", desc: "Dá a cor vermelha ao sangue. É um modelo clássico para entender como as proteínas mudam de forma ao trabalhar.", color: "#f43f5e" }
+];
+
 function App() {
-  const [activeMenu, setActiveMenu] = useState("Proteínas");
+  const [activeMenu, setActiveMenu] = useState("Populares");
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener("resize", handleResize);
@@ -677,85 +688,47 @@ function App() {
   return (
     <div
       style={{
-        display: "flex",
-        flexDirection: isMobile ? "column" : "row",
-        minHeight: "100vh",
-        width: "100vw",
-        overflowX: "hidden",
-        backgroundColor: "#0f172a",
-        color: "#f8fafc",
-        fontFamily: "system-ui, sans-serif",
+        display: "flex", flexDirection: isMobile ? "column" : "row", minHeight: "100vh",
+        width: "100vw", overflowX: "hidden", backgroundColor: "#0f172a", color: "#f8fafc", fontFamily: "system-ui, sans-serif",
       }}
     >
       {/* BARRA LATERAL */}
       <aside
         style={{
-          width: isMobile ? "100%" : "260px",
-          minWidth: isMobile ? "100%" : "260px",
-          backgroundColor: "#1e293b",
-          borderRight: isMobile ? "none" : "1px solid #334155",
-          borderBottom: isMobile ? "1px solid #334155" : "none",
-          padding: "20px",
-          display: "flex",
-          flexDirection: isMobile ? "row" : "column",
-          alignItems: isMobile ? "center" : "stretch",
-          justifyContent: isMobile ? "space-between" : "flex-start",
-          boxSizing: "border-box",
+          width: isMobile ? "100%" : "260px", minWidth: isMobile ? "100%" : "260px", backgroundColor: "#1e293b",
+          borderRight: isMobile ? "none" : "1px solid #334155", borderBottom: isMobile ? "1px solid #334155" : "none",
+          padding: "20px", display: "flex", flexDirection: isMobile ? "row" : "column",
+          alignItems: isMobile ? "center" : "stretch", justifyContent: isMobile ? "space-between" : "flex-start", boxSizing: "border-box",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            marginBottom: isMobile ? "0" : "40px",
-            color: "#818cf8",
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: isMobile ? "0" : "40px", color: "#818cf8" }}>
           <Dna size={isMobile ? 24 : 32} />
           <div>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: isMobile ? "16px" : "20px",
-                fontWeight: "bold",
-              }}
-            >
-              AlphaFold
-            </h2>
-            {!isMobile && (
-              <span style={{ fontSize: "12px", color: "#94a3b8" }}>
-                Analysis System
-              </span>
-            )}
+            <h2 style={{ margin: 0, fontSize: isMobile ? "16px" : "20px", fontWeight: "bold" }}>AlphaFold</h2>
+            {!isMobile && <span style={{ fontSize: "12px", color: "#94a3b8" }}>Analysis System</span>}
           </div>
         </div>
 
-        <nav
-          style={{
-            display: "flex",
-            flexDirection: isMobile ? "row" : "column",
-            gap: "10px",
-            overflowX: isMobile ? "auto" : "visible",
-          }}
-        >
+        <nav style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: "10px", overflowX: isMobile ? "auto" : "visible" }}>
+          
+          {/* POPULARES */}
+          <button
+            onClick={() => setActiveMenu("Populares")}
+            style={{
+              display: "flex", alignItems: "center", gap: "8px", padding: isMobile ? "8px 12px" : "12px 16px",
+              backgroundColor: activeMenu === "Populares" ? "#312e81" : "transparent", color: activeMenu === "Populares" ? "#e0e7ff" : "#cbd5e1",
+              border: "none", borderRadius: "8px", cursor: "pointer", whiteSpace: "nowrap", fontSize: isMobile ? "13px" : "15px", fontWeight: "500", transition: "0.2s",
+            }}
+          >
+            <Star size={18} /> Populares
+          </button>
+
           <button
             onClick={() => setActiveMenu("Proteínas")}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: isMobile ? "8px 12px" : "12px 16px",
-              backgroundColor:
-                activeMenu === "Proteínas" ? "#312e81" : "transparent",
-              color: activeMenu === "Proteínas" ? "#e0e7ff" : "#cbd5e1",
-              border: "none",
-              borderRadius: "8px",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              fontSize: isMobile ? "13px" : "15px",
-              fontWeight: "500",
-              transition: "0.2s",
+              display: "flex", alignItems: "center", gap: "8px", padding: isMobile ? "8px 12px" : "12px 16px",
+              backgroundColor: activeMenu === "Proteínas" ? "#312e81" : "transparent", color: activeMenu === "Proteínas" ? "#e0e7ff" : "#cbd5e1",
+              border: "none", borderRadius: "8px", cursor: "pointer", whiteSpace: "nowrap", fontSize: isMobile ? "13px" : "15px", fontWeight: "500", transition: "0.2s",
             }}
           >
             <FileText size={18} /> Análise
@@ -764,20 +737,9 @@ function App() {
           <button
             onClick={() => setActiveMenu("Comparações")}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: isMobile ? "8px 12px" : "12px 16px",
-              backgroundColor:
-                activeMenu === "Comparações" ? "#312e81" : "transparent",
-              color: activeMenu === "Comparações" ? "#e0e7ff" : "#cbd5e1",
-              border: "none",
-              borderRadius: "8px",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              fontSize: isMobile ? "13px" : "15px",
-              fontWeight: "500",
-              transition: "0.2s",
+              display: "flex", alignItems: "center", gap: "8px", padding: isMobile ? "8px 12px" : "12px 16px",
+              backgroundColor: activeMenu === "Comparações" ? "#312e81" : "transparent", color: activeMenu === "Comparações" ? "#e0e7ff" : "#cbd5e1",
+              border: "none", borderRadius: "8px", cursor: "pointer", whiteSpace: "nowrap", fontSize: isMobile ? "13px" : "15px", fontWeight: "500", transition: "0.2s",
             }}
           >
             <LayoutTemplate size={18} /> Versus
@@ -786,88 +748,60 @@ function App() {
       </aside>
 
       {/* ÁREA PRINCIPAL */}
-      <main
-        style={{
-          flex: 1,
-          padding: isMobile ? "20px" : "40px",
-          boxSizing: "border-box",
-          maxWidth: isMobile ? "100vw" : "calc(100vw - 260px)",
-          overflowY: "auto",
-        }}
-      >
+      <main style={{ flex: 1, padding: isMobile ? "20px" : "40px", boxSizing: "border-box", maxWidth: isMobile ? "100vw" : "calc(100vw - 260px)", overflowY: "auto" }}>
+        
+        {/* POPULARES (HALL DA FAMA) */}
+        {activeMenu === "Populares" && (
+          <div>
+            <header style={{ marginBottom: isMobile ? "20px" : "40px" }}>
+              <h1 style={{ margin: "0 0 8px 0", fontSize: isMobile ? "24px" : "32px" }}>Hall da Fama Acadêmico</h1>
+              <p style={{ margin: 0, color: "#94a3b8", fontSize: isMobile ? "14px" : "16px", maxWidth: "700px", lineHeight: "1.5" }}>
+                Sem ideias do que pesquisar? Conheça as proteínas mais famosas e estudadas pelos cientistas em todo o mundo. Copie o nome e pesquise na nossa aba de Análise!
+              </p>
+            </header>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "20px" }}>
+              {POPULAR_PROTEINS.map((protein, index) => (
+                <div key={index} style={{ backgroundColor: "#1e293b", padding: "20px", borderRadius: "12px", border: "1px solid #334155", display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <h3 style={{ margin: 0, fontSize: "18px", color: protein.color }}>{protein.name}</h3>
+                    <span style={{ fontSize: "11px", backgroundColor: "#0f172a", padding: "4px 8px", borderRadius: "4px", color: "#94a3b8", fontWeight: "bold" }}>NOME DE BUSCA</span>
+                  </div>
+                  <strong style={{ fontSize: "14px", color: "#f8fafc" }}>{protein.title}</strong>
+                  <p style={{ margin: 0, fontSize: "13px", color: "#cbd5e1", lineHeight: "1.5" }}>{protein.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TELA DE ANÁLISE */}
         {activeMenu === "Proteínas" && (
           <div>
             <header style={{ marginBottom: isMobile ? "20px" : "30px" }}>
-              <h1
-                style={{
-                  margin: "0 0 8px 0",
-                  fontSize: isMobile ? "24px" : "32px",
-                }}
-              >
-                Análise Individual
-              </h1>
-              <p
-                style={{
-                  margin: 0,
-                  color: "#94a3b8",
-                  fontSize: isMobile ? "14px" : "16px",
-                }}
-              >
-                Pesquise e visualize uma sequência de proteína em 3D.
-              </p>
+              <h1 style={{ margin: "0 0 8px 0", fontSize: isMobile ? "24px" : "32px" }}>Análise Individual</h1>
+              <p style={{ margin: 0, color: "#94a3b8", fontSize: isMobile ? "14px" : "16px" }}>Pesquise e visualize uma sequência de proteína em 3D.</p>
             </header>
-
             <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-              {/* Passamos o isMobile para o componente saber como se comportar */}
-              <ProteinAnalyzer defaultSearch="Hemoglobin" isMobile={isMobile} />
+              <ProteinAnalyzer defaultSearch="Insulin" isMobile={isMobile} />
             </div>
           </div>
         )}
 
+        {/* TELA MODO VERSUS */}
         {activeMenu === "Comparações" && (
           <div>
             <header style={{ marginBottom: isMobile ? "20px" : "30px" }}>
-              <h1
-                style={{
-                  margin: "0 0 8px 0",
-                  fontSize: isMobile ? "24px" : "32px",
-                }}
-              >
-                Modo Versus (Comparação)
-              </h1>
-              <p
-                style={{
-                  margin: 0,
-                  color: "#94a3b8",
-                  fontSize: isMobile ? "14px" : "16px",
-                }}
-              >
-                Coloque duas proteínas lado a lado para comparar as suas
-                estruturas.
-              </p>
+              <h1 style={{ margin: "0 0 8px 0", fontSize: isMobile ? "24px" : "32px" }}>Modo Versus (Comparação)</h1>
+              <p style={{ margin: 0, color: "#94a3b8", fontSize: isMobile ? "14px" : "16px" }}>Coloque duas proteínas lado a lado para comparar as suas estruturas.</p>
             </header>
-
-            {/* lado a lado! */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-                gap: isMobile ? "40px" : "40px",
-              }}
-            >
-              <ProteinAnalyzer
-                defaultSearch="Hemoglobin"
-                title="Amostra A"
-                isMobile={isMobile}
-              />
-              <ProteinAnalyzer
-                defaultSearch="Myoglobin"
-                title="Amostra B"
-                isMobile={isMobile}
-              />
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? "40px" : "40px" }}>
+              <ProteinAnalyzer defaultSearch="Hemoglobin" title="Amostra A" isMobile={isMobile} />
+              <ProteinAnalyzer defaultSearch="Myoglobin" title="Amostra B" isMobile={isMobile} />
             </div>
           </div>
         )}
+
       </main>
     </div>
   );
