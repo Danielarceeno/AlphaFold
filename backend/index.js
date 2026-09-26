@@ -18,7 +18,7 @@ app.get("/api/search/:name", async (req, res) => {
     const { name } = req.params;
     console.log(`Buscando proteína pelo nome: ${name}`);
     const response = await axios.get(
-      `https://rest.uniprot.org/uniprotkb/search?query=${name}&size=1&format=json`,
+      `https://rest.uniprot.org/uniprotkb/search?query=${encodeURIComponent(name)}&size=1&format=json`,
     );
 
     if (response.data.results && response.data.results.length > 0) {
