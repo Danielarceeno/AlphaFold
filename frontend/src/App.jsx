@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import * as $3Dmol from "3dmol";
 import {
   Dna,
   FileText,
@@ -30,8 +31,8 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
   const [viewerInstance, setViewerInstance] = useState(null);
 
   useEffect(() => {
-    if (viewerContainerRef.current && window.$3Dmol) {
-      const viewer = window.$3Dmol.createViewer(viewerContainerRef.current, {
+    if (viewerContainerRef.current) {
+      const viewer = $3Dmol.createViewer(viewerContainerRef.current, {
         backgroundColor: "#1e293b",
       });
       setViewerInstance(viewer);
