@@ -40,27 +40,83 @@ function splitIntoChunks(text) {
   return chunks;
 }
 
-async function translateToPortuguese(text) {
-  if (translationCache.has(text)) return translationCache.get(text);
-  try {
-    const translated = [];
-    for (const chunk of splitIntoChunks(text)) {
-      const { data } = await axios.get(TRANSLATE_API, {
-        params: { q: chunk, langpair: "en|pt-BR" },
-        timeout: 8000,
-      });
-      if (data.quotaFinished || data.responseStatus !== 200) {
-        throw new Error(`Tradução indisponível (status ${data.responseStatus})`);
+function translateToPortuguese(text) {
+  if (!translationCache.has(text)) {
+    const request = (async () => {
+      const translated = [];
+      for (const chunk of splitIntoChunks(text)) {
+        const { data } = await axios.get(TRANSLATE_API, {
+          params: { q: chunk, langpair: "en|pt-BR" },
+          timeout: 8000,
+        });
+        if (data.quotaFinished || data.responseStatus !== 200) {
+          throw new Error(`Tradução indisponível (status ${data.responseStatus})`);
+        }
+        translated.push(data.responseData.translatedText);
       }
-      translated.push(data.responseData.translatedText);
-    }
-    const result = translated.join(" ");
-    translationCache.set(text, result);
-    return result;
-  } catch (error) {
-    console.error("Erro na tradução:", error.message);
-    return text;
+      return translated.join(" ");
+    })();
+    translationCache.set(text, request);
+    request.catch((error) => {
+      console.error("Erro na tradução:", error.message);
+      translationCache.delete(text);
+    });
   }
+  return translationCache.get(text).catch(() => text);
+}
+
+const AMINO_ACIDS = {
+  A: "Alanina", R: "Arginina", N: "Asparagina", D: "Ácido aspártico",
+  C: "Cisteína", E: "Ácido glutâmico", Q: "Glutamina", G: "Glicina",
+  H: "Histidina", I: "Isoleucina", L: "Leucina", K: "Lisina",
+  M: "Metionina", F: "Fenilalanina", P: "Prolina", S: "Serina",
+  T: "Treonina", W: "Triptofano", Y: "Tirosina", V: "Valina",
+};
+
+const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+
+const aminoName = (code) => (AMINO_ACIDS[code] ? `${AMINO_ACIDS[code]} (${code})` : code);
+
+async function describeVariant(feature, diseaseNames) {
+  const original = feature.alternativeSequence?.originalSequence || "";
+  const mutated = feature.alternativeSequence?.alternativeSequences?.[0] || "";
+
+  let change;
+  if (original && mutated) {
+    change = `Troca ${aminoName(original)} por ${aminoName(mutated)}.`;
+  } else if (original) {
+    change = `Remoção de ${aminoName(original)}.`;
+  } else {
+    change = "Alteração na sequência.";
+  }
+
+  const segments = (feature.description || "")
+    .split(";")
+    .map((seg) => seg.trim())
+    .filter((seg) => seg && !/^(dbSNP|ECO):/.test(seg));
+
+  const parts = [change];
+  for (const seg of segments) {
+    if (!/^in\s/i.test(seg)) {
+      const isPhrase = /\s/.test(seg) || /^[a-z]/.test(seg);
+      parts.push(
+        isPhrase
+          ? `${capitalize(await translateToPortuguese(seg))}.`
+          : `Variante "${seg}".`,
+      );
+      continue;
+    }
+    const acronyms = seg.slice(3).split(/,\s*|\s+and\s+/);
+    if (acronyms.every((a) => diseaseNames.has(a))) {
+      const names = acronyms.map((a) => `${diseaseNames.get(a)} (${a})`);
+      parts.push(`Associada a: ${names.join("; ")}.`);
+    } else {
+      parts.push(`${capitalize(await translateToPortuguese(seg))}.`);
+    }
+  }
+  if (parts.length === 1) parts.push("Variante natural sem doença descrita.");
+
+  return { original, mutated, description: parts.join(" ") };
 }
 
 app.get("/", (req, res) => {
@@ -139,19 +195,30 @@ app.get("/api/uniprot/:id", async (req, res) => {
     const description = functionComment
       ? functionComment.texts[0].value
       : "Descrição não disponível.";
-    const variants =
-      response.data.features
-        ?.filter(
-          (f) => f.type === "Natural variant" && f.location?.start?.value,
-        )
-        .map((f) => ({
-          position: f.location.start.value,
-          original: f.alternativeSequence ? f.alternativeSequence.original : "",
-          mutated: f.alternativeSequence
-            ? f.alternativeSequence.alternative
-            : "",
-          description: f.description || "Mutação associada a doença/variação",
-        })) || [];
+    const diseaseNames = new Map();
+    for (const c of response.data.comments || []) {
+      if (c.commentType === "DISEASE" && c.disease?.acronym) {
+        diseaseNames.set(
+          c.disease.acronym,
+          await translateToPortuguese(c.disease.diseaseId || c.disease.acronym),
+        );
+      }
+    }
+
+    const variantFeatures = (response.data.features || []).filter(
+      (f) => f.type === "Natural variant" && f.location?.start?.value,
+    );
+    const variants = [];
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < variantFeatures.length; i += BATCH_SIZE) {
+      const batch = variantFeatures.slice(i, i + BATCH_SIZE);
+      const described = await Promise.all(
+        batch.map((f) => describeVariant(f, diseaseNames)),
+      );
+      batch.forEach((f, j) =>
+        variants.push({ position: f.location.start.value, ...described[j] }),
+      );
+    }
 
     const hasDescription = Boolean(functionComment);
     res.json({
