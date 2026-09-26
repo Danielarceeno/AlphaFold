@@ -259,7 +259,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
                     wordBreak: "break-word",
                   }}
                 >
-                  {metadata.proteinDescription}
+                  {metadata.uniprotDescription || metadata.proteinDescription}
                 </strong>
               </div>
               <div>

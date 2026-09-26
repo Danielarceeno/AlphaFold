@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const { DISEASES, VARIANT_NOTES } = require("./translations");
 
 const app = express();
 app.use(cors());
@@ -93,10 +94,15 @@ async function describeVariant(feature, diseaseNames) {
   const segments = (feature.description || "")
     .split(";")
     .map((seg) => seg.trim())
-    .filter((seg) => seg && !/^(dbSNP|ECO):/.test(seg));
+    .filter((seg) => seg && !/^(in\s+)?(dbSNP|ECO):/i.test(seg));
 
   const parts = [change];
   for (const seg of segments) {
+    const knownNote = VARIANT_NOTES[seg.toLowerCase()];
+    if (knownNote) {
+      parts.push(`${knownNote}.`);
+      continue;
+    }
     if (!/^in\s/i.test(seg)) {
       const isPhrase = /\s/.test(seg) || /^[a-z]/.test(seg);
       parts.push(
@@ -107,6 +113,12 @@ async function describeVariant(feature, diseaseNames) {
       continue;
     }
     const acronyms = seg.slice(3).split(/,\s*|\s+and\s+/);
+    // Variantes batizadas com nomes de lugar, ex.: "in Raleigh" ou "in Newcastle and Duino"
+    const isVariantName = (a) => /^[A-Z][A-Za-z-]*$/.test(a) && /[a-z]/.test(a);
+    if (acronyms.every((a) => !diseaseNames.has(a) && isVariantName(a))) {
+      parts.push(`Variante conhecida como ${acronyms.join(" e ")}.`);
+      continue;
+    }
     if (acronyms.every((a) => diseaseNames.has(a))) {
       const names = acronyms.map((a) => `${diseaseNames.get(a)} (${a})`);
       parts.push(`Associada a: ${names.join("; ")}.`);
@@ -200,7 +212,8 @@ app.get("/api/uniprot/:id", async (req, res) => {
       if (c.commentType === "DISEASE" && c.disease?.acronym) {
         diseaseNames.set(
           c.disease.acronym,
-          await translateToPortuguese(c.disease.diseaseId || c.disease.acronym),
+          DISEASES[c.disease.diseaseId] ||
+            (await translateToPortuguese(c.disease.diseaseId || c.disease.acronym)),
         );
       }
     }
