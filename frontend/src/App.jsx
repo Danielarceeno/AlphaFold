@@ -62,11 +62,17 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
       );
       setMetadata(metadataResponse.data);
 
-      const uniprotResponse = await axios.get(
-        `${BASE_URL}/api/uniprot/${proteinId}`,
-      );
-      setDescription(uniprotResponse.data.function);
-      setVariants(uniprotResponse.data.variants);
+      try {
+        const uniprotResponse = await axios.get(
+          `${BASE_URL}/api/uniprot/${proteinId}`,
+        );
+        setDescription(uniprotResponse.data.function);
+        setVariants(uniprotResponse.data.variants);
+      } catch (uniprotError) {
+        console.error(uniprotError);
+        setDescription("Descrição indisponível no momento.");
+        setVariants([]);
+      }
 
       const structureResponse = await axios.get(
         `${BASE_URL}/api/protein/${proteinId}/structure`,

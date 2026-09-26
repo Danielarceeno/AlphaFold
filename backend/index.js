@@ -41,7 +41,14 @@ app.get("/api/protein/:id", async (req, res) => {
     const response = await axios.get(`${ALPHAFOLD_API}/${id}`);
     res.json(response.data[0]);
   } catch (error) {
-    res.status(404).json({ error: "Proteína não encontrada no AlphaFold DB." });
+    const status = error.response?.status === 404 ? 404 : 502;
+    console.error("Erro ao buscar no AlphaFold:", error.message);
+    res.status(status).json({
+      error:
+        status === 404
+          ? "Proteína não encontrada no AlphaFold DB."
+          : "Erro ao consultar o AlphaFold DB.",
+    });
   }
 });
 
@@ -87,7 +94,14 @@ app.get("/api/uniprot/:id", async (req, res) => {
 
     res.json({ function: description, variants: variants });
   } catch (error) {
-    res.json({ function: "Erro ao carregar dados.", variants: [] });
+    const status = error.response?.status === 404 ? 404 : 502;
+    console.error("Erro ao buscar no UniProt:", error.message);
+    res.status(status).json({
+      error:
+        status === 404
+          ? "Proteína não encontrada no UniProt."
+          : "Erro ao consultar o UniProt.",
+    });
   }
 });
 
