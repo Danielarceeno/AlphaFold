@@ -17,9 +17,16 @@ app.get("/api/search/:name", async (req, res) => {
   try {
     const { name } = req.params;
     console.log(`Buscando proteína pelo nome: ${name}`);
-    const response = await axios.get(
-      `https://rest.uniprot.org/uniprotkb/search?query=${encodeURIComponent(name)}&size=1&format=json`,
-    );
+    const searchUniprot = (query) =>
+      axios.get(
+        `https://rest.uniprot.org/uniprotkb/search?query=${encodeURIComponent(query)}&size=1&format=json`,
+      );
+
+    // Prioriza entradas revisadas (Swiss-Prot); se não houver, busca sem filtro.
+    let response = await searchUniprot(`(${name}) AND reviewed:true`);
+    if (!response.data.results?.length) {
+      response = await searchUniprot(name);
+    }
 
     if (response.data.results && response.data.results.length > 0) {
       const proteinId = response.data.results[0].primaryAccession;
@@ -41,7 +48,8 @@ app.get("/api/protein/:id", async (req, res) => {
     const response = await axios.get(`${ALPHAFOLD_API}/${id}`);
     res.json(response.data[0]);
   } catch (error) {
-    const status = error.response?.status === 404 ? 404 : 502;
+    const upstream = error.response?.status;
+    const status = upstream === 404 || upstream === 400 ? 404 : 502;
     console.error("Erro ao buscar no AlphaFold:", error.message);
     res.status(status).json({
       error:
@@ -94,7 +102,8 @@ app.get("/api/uniprot/:id", async (req, res) => {
 
     res.json({ function: description, variants: variants });
   } catch (error) {
-    const status = error.response?.status === 404 ? 404 : 502;
+    const upstream = error.response?.status;
+    const status = upstream === 404 || upstream === 400 ? 404 : 502;
     console.error("Erro ao buscar no UniProt:", error.message);
     res.status(status).json({
       error:
