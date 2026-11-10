@@ -30,6 +30,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
   const [isFunctionExpanded, setIsFunctionExpanded] = useState(false);
 
   const [variants, setVariants] = useState([]);
+  const [paeImageFailed, setPaeImageFailed] = useState(false);
 
   const [showMutationsPanel, setShowMutationsPanel] = useState(false);
   const [activeMutations, setActiveMutations] = useState([]);
@@ -86,6 +87,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
     setMetadata(null);
     setDescription(null);
     setVariants([]);
+    setPaeImageFailed(false);
     setShowMutationsPanel(false);
     setActiveMutations([]);
     setIsFunctionExpanded(false);
@@ -650,6 +652,13 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
           >
             Matriz PAE (Detector de Flexibilidade)
           </h4>
+          {/* Algumas entradas (ex.: Spike do SARS-CoV-2) informam a URL da
+              imagem, mas o arquivo não existe no AlphaFold DB */}
+          {paeImageFailed ? (
+            <p style={{ color: "#94a3b8", fontSize: "13px", margin: 0 }}>
+              Matriz PAE indisponível para esta proteína no AlphaFold DB.
+            </p>
+          ) : (
           <div
             style={{
               display: "flex",
@@ -661,6 +670,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
             <img
               src={metadata.paeImageUrl}
               alt="Gráfico PAE"
+              onError={() => setPaeImageFailed(true)}
               style={{
                 width: "100%",
                 maxWidth: "280px",
@@ -725,6 +735,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
               </ul>
             </div>
           </div>
+          )}
         </div>
       )}
     </div>
