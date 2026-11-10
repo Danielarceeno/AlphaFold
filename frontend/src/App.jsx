@@ -21,7 +21,12 @@ const PLDDT_COLORS = {
   veryLow: "#ff7d45",
 };
 
-function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
+function ProteinAnalyzer({
+  defaultSearch = "",
+  title = "",
+  autoSearch = false,
+  isMobile,
+}) {
   const [searchTerm, setSearchTerm] = useState(defaultSearch);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -149,6 +154,12 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
       if (isCurrent()) setLoading(false);
     }
   };
+
+  // Vindo do Hall da Fama, a análise começa sozinha ao abrir a tela
+  useEffect(() => {
+    if (autoSearch) fetchAndRenderProtein();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só na montagem
+  }, []);
 
   const applyStyles = (currentActiveMutations) => {
     const viewerInstance = viewerRef.current;
@@ -753,6 +764,12 @@ const POPULAR_PROTEINS = [
 
 function App() {
   const [activeMenu, setActiveMenu] = useState("Populares");
+  const [selectedProtein, setSelectedProtein] = useState(null);
+
+  const analyzeProtein = (name) => {
+    setSelectedProtein(name);
+    setActiveMenu("Proteínas");
+  };
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   
   useEffect(() => {
@@ -832,16 +849,30 @@ function App() {
             <header style={{ marginBottom: isMobile ? "20px" : "40px" }}>
               <h1 style={{ margin: "0 0 8px 0", fontSize: isMobile ? "24px" : "32px" }}>Hall da Fama Acadêmico</h1>
               <p style={{ margin: 0, color: "#94a3b8", fontSize: isMobile ? "14px" : "16px", maxWidth: "700px", lineHeight: "1.5" }}>
-                Sem ideias do que pesquisar? Conheça as proteínas mais famosas e estudadas pelos cientistas em todo o mundo. Copie o nome e pesquise na nossa aba de Análise!
+                Sem ideias do que pesquisar? Conheça as proteínas mais famosas e estudadas pelos cientistas em todo o mundo. Clique em uma delas para abrir a análise completa!
               </p>
             </header>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "20px" }}>
-              {POPULAR_PROTEINS.map((protein, index) => (
-                <div key={index} style={{ backgroundColor: "#1e293b", padding: "20px", borderRadius: "12px", border: "1px solid #334155", display: "flex", flexDirection: "column", gap: "10px" }}>
+              {POPULAR_PROTEINS.map((protein) => (
+                <div
+                  key={protein.name}
+                  className="protein-card"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Analisar ${protein.name}`}
+                  onClick={() => analyzeProtein(protein.name)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      analyzeProtein(protein.name);
+                    }
+                  }}
+                  style={{ backgroundColor: "#1e293b", padding: "20px", borderRadius: "12px", border: "1px solid #334155", display: "flex", flexDirection: "column", gap: "10px", cursor: "pointer" }}
+                >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <h3 style={{ margin: 0, fontSize: "18px", color: protein.color }}>{protein.name}</h3>
-                    <span style={{ fontSize: "11px", backgroundColor: "#0f172a", padding: "4px 8px", borderRadius: "4px", color: "#94a3b8", fontWeight: "bold" }}>NOME DE BUSCA</span>
+                    <span style={{ fontSize: "11px", backgroundColor: "#0f172a", padding: "4px 8px", borderRadius: "4px", color: "#94a3b8", fontWeight: "bold" }}>ANALISAR →</span>
                   </div>
                   <strong style={{ fontSize: "14px", color: "#f8fafc" }}>{protein.title}</strong>
                   <p style={{ margin: 0, fontSize: "13px", color: "#cbd5e1", lineHeight: "1.5" }}>{protein.desc}</p>
@@ -859,7 +890,12 @@ function App() {
               <p style={{ margin: 0, color: "#94a3b8", fontSize: isMobile ? "14px" : "16px" }}>Pesquise e visualize uma sequência de proteína em 3D.</p>
             </header>
             <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-              <ProteinAnalyzer defaultSearch="Insulin" isMobile={isMobile} />
+              <ProteinAnalyzer
+                key={selectedProtein || "default"}
+                defaultSearch={selectedProtein || "Insulin"}
+                autoSearch={Boolean(selectedProtein)}
+                isMobile={isMobile}
+              />
             </div>
           </div>
         )}

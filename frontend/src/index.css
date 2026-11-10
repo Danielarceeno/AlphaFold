@@ -24,3 +24,14 @@ button:focus-visible {
   outline: 2px solid #818cf8;
   outline-offset: 2px;
 }
+
+.protein-card {
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.protein-card:hover,
+.protein-card:focus-visible {
+  border-color: #818cf8 !important;
+  transform: translateY(-2px);
+  outline: none;
+}
