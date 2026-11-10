@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import * as $3Dmol from "3dmol";
 import {
   Dna,
   FileText,
@@ -12,7 +11,15 @@ import {
   Star
 } from "lucide-react";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+
+// Cores oficiais de confiança (pLDDT) do AlphaFold DB
+const PLDDT_COLORS = {
+  veryHigh: "#0053d6",
+  confident: "#65cbf3",
+  low: "#ffdb13",
+  veryLow: "#ff7d45",
+};
 
 function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
   const [searchTerm, setSearchTerm] = useState(defaultSearch);
@@ -28,19 +35,51 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
   const [activeMutations, setActiveMutations] = useState([]);
 
   const viewerContainerRef = useRef(null);
-  const [viewerInstance, setViewerInstance] = useState(null);
+  const viewerRef = useRef(null);
+  const viewerPromiseRef = useRef(null);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
-    if (viewerContainerRef.current) {
-      const viewer = $3Dmol.createViewer(viewerContainerRef.current, {
+    const container = viewerContainerRef.current;
+    const requestCounter = requestIdRef;
+    let viewer = null;
+    let unmounted = false;
+
+    // O 3Dmol é a maior parte do bundle: só é baixado quando um visualizador
+    // aparece na tela, deixando a página inicial leve.
+    viewerPromiseRef.current = import("3dmol").then(($3Dmol) => {
+      if (unmounted) return null;
+      viewer = $3Dmol.createViewer(container, {
         backgroundColor: "#1e293b",
       });
-      setViewerInstance(viewer);
-    }
+      viewerRef.current = viewer;
+      return viewer;
+    });
+    viewerPromiseRef.current.catch(() => {}); // o erro é tratado na busca
+
+    // Sem esta limpeza cada troca de aba (e o StrictMode) deixava um canvas
+    // e um contexto WebGL órfãos; o navegador só permite alguns por página.
+    return () => {
+      unmounted = true;
+      requestCounter.current++; // invalida respostas ainda em trânsito
+      viewerRef.current = null;
+      if (!viewer) return;
+      viewer.clear();
+      container.querySelectorAll("canvas").forEach((canvas) => {
+        const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+        gl?.getExtension("WEBGL_lose_context")?.loseContext();
+        canvas.remove();
+      });
+    };
   }, []);
 
   const fetchAndRenderProtein = async () => {
-    if (!searchTerm || !viewerInstance) return;
+    const term = searchTerm.trim();
+    if (!term || loading) return;
+
+    const requestId = ++requestIdRef.current;
+    const isCurrent = () => requestIdRef.current === requestId;
+    let proteinId = null;
 
     setLoading(true);
     setError(null);
@@ -52,58 +91,75 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
     setIsFunctionExpanded(false);
 
     try {
+      const viewerInstance = await viewerPromiseRef.current;
+      if (!viewerInstance || !isCurrent()) return;
+      viewerInstance.clear();
+      viewerInstance.render();
+
       const searchResponse = await axios.get(
-        `${BASE_URL}/api/search/${searchTerm}`,
+        `${BASE_URL}/api/search/${encodeURIComponent(term)}`,
       );
-      const proteinId = searchResponse.data.id;
+      proteinId = searchResponse.data.id;
 
       const metadataResponse = await axios.get(
         `${BASE_URL}/api/protein/${proteinId}`,
       );
+      if (!isCurrent()) return;
       setMetadata(metadataResponse.data);
 
-      try {
-        const uniprotResponse = await axios.get(
-          `${BASE_URL}/api/uniprot/${proteinId}`,
-        );
-        setDescription(uniprotResponse.data.function);
-        setVariants(uniprotResponse.data.variants);
-      } catch (uniprotError) {
-        console.error(uniprotError);
-        setDescription("Descrição indisponível no momento.");
-        setVariants([]);
-      }
+      // A descrição (traduzida no backend) é lenta: carrega em paralelo,
+      // sem segurar a exibição do modelo 3D.
+      axios
+        .get(`${BASE_URL}/api/uniprot/${proteinId}`)
+        .then((uniprotResponse) => {
+          if (!isCurrent()) return;
+          setDescription(uniprotResponse.data.function);
+          setVariants(uniprotResponse.data.variants);
+        })
+        .catch((uniprotError) => {
+          console.error(uniprotError);
+          if (isCurrent()) setDescription("Descrição indisponível no momento.");
+        });
 
       const structureResponse = await axios.get(
         `${BASE_URL}/api/protein/${proteinId}/structure`,
       );
-      viewerInstance.clear();
+      if (!isCurrent()) return;
       viewerInstance.addModel(structureResponse.data, "pdb");
 
       applyStyles([]);
 
       viewerInstance.zoomTo();
+      viewerInstance.render();
     } catch (err) {
       console.error(err);
-      setError(
-        "Não encontrada. Tente o nome em inglês (ex: Insulin) ou verifique o texto.",
-      );
+      if (!isCurrent()) return;
+      if (!err.response) {
+        setError("Não foi possível conectar ao servidor. Tente novamente.");
+      } else if (!proteinId && err.response.status === 404) {
+        setError(
+          "Não encontrada. Tente o nome em inglês (ex: Insulin) ou verifique o texto.",
+        );
+      } else {
+        setError(err.response.data?.error || "Erro ao carregar a proteína.");
+      }
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
 
   const applyStyles = (currentActiveMutations) => {
+    const viewerInstance = viewerRef.current;
     if (!viewerInstance) return;
     viewerInstance.setStyle(
       {},
       {
         cartoon: {
           colorfunc: (atom) => {
-            if (atom.b > 90) return "#0053d6";
-            if (atom.b > 70) return "#65cbff";
-            if (atom.b > 50) return "#ffe500";
-            return "#ff7d45";
+            if (atom.b > 90) return PLDDT_COLORS.veryHigh;
+            if (atom.b > 70) return PLDDT_COLORS.confident;
+            if (atom.b > 50) return PLDDT_COLORS.low;
+            return PLDDT_COLORS.veryLow;
           },
         },
       },
@@ -119,8 +175,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
     viewerInstance.render();
   };
 
-  const toggleSingleMutation = (position) => {
-    const pos = parseInt(position);
+  const toggleSingleMutation = (pos) => {
     let newActiveList;
     if (activeMutations.includes(pos)) {
       newActiveList = activeMutations.filter((p) => p !== pos);
@@ -167,6 +222,9 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") fetchAndRenderProtein();
+            }}
             placeholder="Nome (ex: Hemoglobin)"
             style={{
               width: "100%",
@@ -381,7 +439,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
                     style={{
                       width: "8px",
                       height: "8px",
-                      backgroundColor: "#0053d6",
+                      backgroundColor: PLDDT_COLORS.veryHigh,
                       borderRadius: "2px",
                     }}
                   ></div>{" "}
@@ -394,7 +452,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
                     style={{
                       width: "8px",
                       height: "8px",
-                      backgroundColor: "#65cbff",
+                      backgroundColor: PLDDT_COLORS.confident,
                       borderRadius: "2px",
                     }}
                   ></div>{" "}
@@ -407,7 +465,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
                     style={{
                       width: "8px",
                       height: "8px",
-                      backgroundColor: "#ffe500",
+                      backgroundColor: PLDDT_COLORS.low,
                       borderRadius: "2px",
                     }}
                   ></div>{" "}
@@ -420,7 +478,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
                     style={{
                       width: "8px",
                       height: "8px",
-                      backgroundColor: "#ff7d45",
+                      backgroundColor: PLDDT_COLORS.veryLow,
                       borderRadius: "2px",
                     }}
                   ></div>{" "}
@@ -520,7 +578,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
               style={{ display: "flex", flexDirection: "column", gap: "8px" }}
             >
               {variants.map((v, i) => {
-                const pos = parseInt(v.position);
+                const pos = v.position;
                 const isActive = activeMutations.includes(pos);
 
                 return (
@@ -551,7 +609,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
                     >
                       Posição {v.position}{" "}
                       <span style={{ color: "#94a3b8", fontWeight: "normal" }}>
-                        ({v.original} → {v.mutated})
+                        ({v.original} → {v.mutated || "removido"})
                       </span>
                     </span>
                     <span
@@ -640,7 +698,7 @@ function ProteinAnalyzer({ defaultSearch = "", title = "", isMobile }) {
                 }}
               >
                 Este mapa mostra quais partes da proteína se movem juntas. Os
-                cientistas utilizam-no para descobrir se a proteína é um "bloco
+                cientistas o utilizam para descobrir se a proteína é um "bloco
                 sólido" ou se tem "tentáculos flexíveis".
               </p>
               <ul
@@ -677,8 +735,8 @@ const POPULAR_PROTEINS = [
   { name: "p53", title: "Guardiã do Genoma", desc: "A proteína mais estudada na história da pesquisa do câncer. Ela impede que células sofram mutações graves.", color: "#ef4444" },
   { name: "Cas9", title: "A Tesoura Genética (CRISPR)", desc: "Revolucionou a biologia moderna. É usada pelos cientistas para 'cortar e editar' o DNA com precisão.", color: "#8b5cf6" },
   { name: "Spike", title: "A Chave do Vírus", desc: "A famosa proteína do SARS-CoV-2. Estudá-la foi o que permitiu a criação rápida das vacinas contra a COVID-19.", color: "#10b981" },
-  { name: "GFP", title: "Lanterna Celular", desc: "Proteína Fluorescente Verde (veio de uma água-viva). Os cientistas usam-na para 'iluminar' e rastrear células ao vivo.", color: "#84cc16" },
-  { name: "Insulin", title: "Reguladora de Energia", desc: "Vital para o controle do açúcar no sangue. O seu estudo contínuo salva a vida de milhões de diabéticos.", color: "#3b82f6" },
+  { name: "GFP", title: "Lanterna Celular", desc: "Proteína Fluorescente Verde (veio de uma água-viva). Os cientistas a usam para 'iluminar' e rastrear células ao vivo.", color: "#84cc16" },
+  { name: "Insulin", title: "Reguladora de Energia", desc: "Vital para o controle do açúcar no sangue. Seu estudo contínuo salva a vida de milhões de diabéticos.", color: "#3b82f6" },
   { name: "Hemoglobin", title: "Transportadora de Oxigênio", desc: "Dá a cor vermelha ao sangue. É um modelo clássico para entender como as proteínas mudam de forma ao trabalhar.", color: "#f43f5e" }
 ];
 
@@ -696,7 +754,7 @@ function App() {
     <div
       style={{
         display: "flex", flexDirection: isMobile ? "column" : "row", minHeight: "100vh",
-        width: "100vw", overflowX: "hidden", backgroundColor: "#0f172a", color: "#f8fafc", fontFamily: "system-ui, sans-serif",
+        width: "100%", overflowX: "hidden", backgroundColor: "#0f172a", color: "#f8fafc", fontFamily: "system-ui, sans-serif",
       }}
     >
       {/* BARRA LATERAL */}
@@ -800,7 +858,7 @@ function App() {
           <div>
             <header style={{ marginBottom: isMobile ? "20px" : "30px" }}>
               <h1 style={{ margin: "0 0 8px 0", fontSize: isMobile ? "24px" : "32px" }}>Modo Versus (Comparação)</h1>
-              <p style={{ margin: 0, color: "#94a3b8", fontSize: isMobile ? "14px" : "16px" }}>Coloque duas proteínas lado a lado para comparar as suas estruturas.</p>
+              <p style={{ margin: 0, color: "#94a3b8", fontSize: isMobile ? "14px" : "16px" }}>Coloque duas proteínas lado a lado para comparar suas estruturas.</p>
             </header>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? "40px" : "40px" }}>
               <ProteinAnalyzer defaultSearch="Hemoglobin" title="Amostra A" isMobile={isMobile} />

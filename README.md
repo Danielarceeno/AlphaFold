@@ -42,15 +42,37 @@ O projeto utiliza uma arquitetura baseada em microsserviços lógicos, separando
 
 ### ⚙️ Backend (Orquestrador de APIs RESTful)
 - **Node.js** com framework **Express**
-- **CORS** para segurança de rotas
+- **CORS** para permitir as chamadas do frontend
 - Consumo e tratamento das APIs:
   - *REST API UniProtKB* (Dados biológicos e mutações)
   - *AlphaFold Protein Structure API* (Arquivos .pdb e imagens PAE)
+  - *MyMemory Translation API* (Tradução das descrições para português)
 - **Hospedagem:** Render
 
 ---
 
-👨‍💻 Autor
+## 🚀 Como Rodar Localmente
+
+Requer Node.js 20 ou superior.
+
+```bash
+# Backend (http://localhost:3000)
+cd backend
+npm install
+npm run dev
+npm test      # testes automatizados (não usam rede)
+
+# Frontend (http://localhost:5173), em outro terminal
+cd frontend
+npm install
+cp .env.example .env   # define VITE_API_BASE_URL
+npm run dev
+```
+
+---
+
+## 👨‍💻 Autor
+
 Desenvolvido com 🩵 por Daniel.
 
 Este projeto faz parte de um Trabalho de Conclusão de Curso (TCC) na intersecção entre Desenvolvimento de Software e Bioinformática.
