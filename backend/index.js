@@ -5,11 +5,66 @@ const { DISEASES, VARIANT_NOTES } = require("./translations");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const ALPHAFOLD_API = "https://alphafold.ebi.ac.uk/api/prediction";
+const UNIPROT_API = "https://rest.uniprot.org/uniprotkb";
 const TRANSLATE_API = "https://api.mymemory.translated.net/get";
+
+// Formato oficial de um accession do UniProt (ex.: P01308, A0A024R161)
+const ACCESSION_REGEX =
+  /^([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2})$/;
+
+// Impede que o :id seja usado para montar outros caminhos nas APIs externas
+app.param("id", (req, res, next, id) => {
+  const accession = id.toUpperCase();
+  if (!ACCESSION_REGEX.test(accession)) {
+    return res.status(400).json({ error: "ID de proteína inválido." });
+  }
+  req.params.id = accession;
+  next();
+});
+
+const upstreamStatus = (error) => {
+  const upstream = error.response?.status;
+  return upstream === 404 || upstream === 400 ? 404 : 502;
+};
+
+// Nomes populares que a busca textual do UniProt resolve para a proteína errada
+// (ex.: "p53" devolvia uma proteína de Drosophila e "Spike" devolvia a ACE2 humana)
+const PROTEIN_ALIASES = {
+  p53: "P04637", // Cellular tumor antigen p53 (Homo sapiens)
+  tp53: "P04637",
+  cas9: "Q99ZW2", // Cas9 de Streptococcus pyogenes (SpCas9), a usada no CRISPR
+  spcas9: "Q99ZW2",
+  spike: "P0DTC2", // Spike glycoprotein (SARS-CoV-2)
+  "spike protein": "P0DTC2",
+  "spike glycoprotein": "P0DTC2",
+};
+
+const MAX_PREDICTIONS_CACHED = 200;
+const predictionCache = new Map();
+
+// Metadados do AlphaFold; o cache evita consultar a API de novo ao baixar a estrutura
+function fetchPrediction(id) {
+  if (!predictionCache.has(id)) {
+    const request = axios.get(`${ALPHAFOLD_API}/${id}`).then(({ data }) => {
+      const entry = data.find((e) => e.uniprotAccession === id) || data[0];
+      if (!entry) {
+        throw Object.assign(new Error("Sem predição para este ID"), {
+          response: { status: 404 },
+        });
+      }
+      return entry;
+    });
+    if (predictionCache.size >= MAX_PREDICTIONS_CACHED) {
+      predictionCache.delete(predictionCache.keys().next().value);
+    }
+    predictionCache.set(id, request);
+    request.catch(() => predictionCache.delete(id));
+  }
+  return predictionCache.get(id);
+}
 
 function stripReferences(text) {
   return text
@@ -19,7 +74,7 @@ function stripReferences(text) {
     .trim();
 }
 
-const MAX_CHUNK = 450; 
+const MAX_CHUNK = 450;
 const translationCache = new Map();
 
 function splitIntoChunks(text) {
@@ -98,7 +153,9 @@ async function describeVariant(feature, diseaseNames) {
 
   const parts = [change];
   for (const seg of segments) {
-    const knownNote = VARIANT_NOTES[seg.toLowerCase()];
+    const noteKey = seg.toLowerCase();
+    const knownNote =
+      Object.hasOwn(VARIANT_NOTES, noteKey) && VARIANT_NOTES[noteKey];
     if (knownNote) {
       parts.push(`${knownNote}.`);
       continue;
@@ -136,22 +193,28 @@ app.get("/", (req, res) => {
 });
 
 app.get("/api/search/:name", async (req, res) => {
+  const name = req.params.name.trim();
+  if (!name) {
+    return res.status(400).json({ error: "Informe o nome da proteína." });
+  }
+  const alias = name.toLowerCase().replace(/\s+/g, " ");
+  if (Object.hasOwn(PROTEIN_ALIASES, alias)) {
+    return res.json({ id: PROTEIN_ALIASES[alias] });
+  }
   try {
-    const { name } = req.params;
     console.log(`Buscando proteína pelo nome: ${name}`);
     const searchUniprot = (query) =>
-      axios.get(
-        `https://rest.uniprot.org/uniprotkb/search?query=${encodeURIComponent(query)}&size=1&format=json`,
-      );
+      axios.get(`${UNIPROT_API}/search`, {
+        params: { query, size: 1, format: "json" },
+      });
 
     let response = await searchUniprot(`(${name}) AND reviewed:true`);
     if (!response.data.results?.length) {
       response = await searchUniprot(name);
     }
 
-    if (response.data.results && response.data.results.length > 0) {
-      const proteinId = response.data.results[0].primaryAccession;
-      res.json({ id: proteinId });
+    if (response.data.results?.length) {
+      res.json({ id: response.data.results[0].primaryAccession });
     } else {
       res
         .status(404)
@@ -159,18 +222,21 @@ app.get("/api/search/:name", async (req, res) => {
     }
   } catch (error) {
     console.error("Erro na busca:", error.message);
-    res.status(500).json({ error: "Erro ao buscar o nome no banco de dados." });
+    // O UniProt responde 400 quando o texto quebra a sintaxe da consulta, ex.: "a(b"
+    if (error.response?.status === 400) {
+      return res.status(400).json({
+        error: "Termo de busca inválido. Use apenas o nome da proteína.",
+      });
+    }
+    res.status(502).json({ error: "Erro ao buscar o nome no banco de dados." });
   }
 });
 
 app.get("/api/protein/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    const response = await axios.get(`${ALPHAFOLD_API}/${id}`);
-    res.json(response.data[0]);
+    res.json(await fetchPrediction(req.params.id));
   } catch (error) {
-    const upstream = error.response?.status;
-    const status = upstream === 404 || upstream === 400 ? 404 : 502;
+    const status = upstreamStatus(error);
     console.error("Erro ao buscar no AlphaFold:", error.message);
     res.status(status).json({
       error:
@@ -183,15 +249,20 @@ app.get("/api/protein/:id", async (req, res) => {
 
 app.get("/api/protein/:id/structure", async (req, res) => {
   try {
-    const { id } = req.params;
-    const metadataResponse = await axios.get(`${ALPHAFOLD_API}/${id}`);
-    const pdbUrl = metadataResponse.data[0].pdbUrl;
-    const pdbResponse = await axios.get(pdbUrl);
+    const { pdbUrl } = await fetchPrediction(req.params.id);
+    const pdbResponse = await axios.get(pdbUrl, { responseType: "text" });
 
     res.set("Content-Type", "text/plain");
     res.send(pdbResponse.data);
   } catch (error) {
-    res.status(500).json({ error: "Erro ao baixar a estrutura da proteína." });
+    const status = upstreamStatus(error);
+    console.error("Erro ao baixar a estrutura:", error.message);
+    res.status(status).json({
+      error:
+        status === 404
+          ? "Estrutura não encontrada no AlphaFold DB."
+          : "Erro ao baixar a estrutura da proteína.",
+    });
   }
 });
 
@@ -199,7 +270,7 @@ app.get("/api/uniprot/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const response = await axios.get(
-      `https://rest.uniprot.org/uniprotkb/${id}.json`,
+      `${UNIPROT_API}/${id}.json`,
     );
     const functionComment = response.data.comments?.find(
       (c) => c.commentType === "FUNCTION",
@@ -238,11 +309,10 @@ app.get("/api/uniprot/:id", async (req, res) => {
       function: hasDescription
         ? await translateToPortuguese(stripReferences(description))
         : description,
-      variants: variants,
+      variants,
     });
   } catch (error) {
-    const upstream = error.response?.status;
-    const status = upstream === 404 || upstream === 400 ? 404 : 502;
+    const status = upstreamStatus(error);
     console.error("Erro ao buscar no UniProt:", error.message);
     res.status(status).json({
       error:
@@ -253,6 +323,18 @@ app.get("/api/uniprot/:id", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Backend rodando na porta ${PORT}`);
-});
+// Só sobe o servidor quando executado diretamente; os testes importam o app
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`✅ Backend rodando na porta ${PORT}`);
+  });
+}
+
+module.exports = {
+  app,
+  stripReferences,
+  splitIntoChunks,
+  describeVariant,
+  MAX_CHUNK,
+  PROTEIN_ALIASES,
+};
